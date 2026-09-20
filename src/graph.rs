@@ -8,6 +8,8 @@ pub use crate::ports::PortCounts;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeKind {
     Vco,
+    /// White-noise source under the oscillator family (extension demo).
+    Noise,
     Vcf,
     Vca,
     Adsr,

@@ -37,7 +37,7 @@ git clone https://github.com/KrvyFT/waver-core.git
 | 模块 | 说明 |
 |------|------|
 | `graph` / `compile` / `schedule` | 可编辑图 → 拓扑序（反馈时插 `Delay`） |
-| `module` | `ModuleDesc`、侧栏分区、参数默认值与文案 |
+| `module` | `ModuleFamily`（类型）、`ModuleDesc` / `MODULE_CATALOG`、参数默认值与文案 |
 | `patch` / `param` | `CompiledPatch`、`ParamRegistry`、`ParamCell` |
 | `command` / `status` | `RtCommand`、`EngineStatus` |
 

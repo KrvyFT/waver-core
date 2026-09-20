@@ -19,7 +19,7 @@ pub use command::RtCommand;
 pub use error::{GraphError, PortDirection};
 pub use graph::{Edge, Graph, Node, NodeKind, PortCounts, PortRef};
 pub use ids::{NodeId, ParamId, PortId};
-pub use module::{MODULE_CATALOG, ModuleDesc, ModuleSection};
+pub use module::{MODULE_CATALOG, ModuleDesc, ModuleFamily};
 pub use param::ParamCell;
 pub use patch::{CompiledPatch, ParamRegistry, default_param_value, param_label};
 pub use schedule::{Link, Schedule};

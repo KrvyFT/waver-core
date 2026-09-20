@@ -1,26 +1,49 @@
-//! Static module descriptors: single source of truth for ports, params, and UI copy.
+//! Static module descriptors: family (type) + per-kind metadata.
 
 use crate::{NodeKind, ParamId, PortCounts};
 
-/// Sidebar grouping for the module library.
+/// Logical module type for library grouping. Add a variant to introduce a new type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ModuleSection {
-    /// Primary signal sources / sinks.
-    Core,
-    /// Helpers and utilities.
+pub enum ModuleFamily {
+    /// Tone / noise sources.
+    Oscillator,
+    /// Filters.
+    Filter,
+    /// VCA / envelopes.
+    AmpEnv,
+    /// LFOs and modulators.
+    Modulation,
+    /// Mixers / routers.
+    Mixer,
+    /// Delays, silence, helpers.
     Utility,
-    /// Enumerated but not yet addable / runnable.
-    Planned,
+    /// Device I/O sinks / sources.
+    Io,
 }
 
-impl ModuleSection {
+impl ModuleFamily {
+    /// Stable sidebar order.
+    pub const ALL: &'static [Self] = &[
+        Self::Oscillator,
+        Self::Filter,
+        Self::AmpEnv,
+        Self::Modulation,
+        Self::Mixer,
+        Self::Utility,
+        Self::Io,
+    ];
+
     /// Chinese label shown above each library group.
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Core => "核心",
+            Self::Oscillator => "振荡器",
+            Self::Filter => "滤波器",
+            Self::AmpEnv => "放大 / 包络",
+            Self::Modulation => "调制",
+            Self::Mixer => "混音",
             Self::Utility => "工具",
-            Self::Planned => "计划中",
+            Self::Io => "输入 / 输出",
         }
     }
 }
@@ -30,6 +53,8 @@ impl ModuleSection {
 pub struct ModuleDesc {
     /// IR kind this descriptor belongs to.
     pub kind: NodeKind,
+    /// Library / DSP type bucket.
+    pub family: ModuleFamily,
     /// Jack and parameter cardinality.
     pub ports: PortCounts,
     /// Sidebar display name (Chinese).
@@ -42,8 +67,6 @@ pub struct ModuleDesc {
     pub summary: &'static str,
     /// Inspector panel description.
     pub inspector_blurb: &'static str,
-    /// Library section.
-    pub section: ModuleSection,
     /// When false, the library entry is visible but disabled.
     pub addable: bool,
     /// Default values; length must equal `ports.params`.
@@ -74,28 +97,48 @@ impl ModuleDesc {
 
 const VCO_PARAM_DEFAULTS: &[f32] = &[440.0, 0.5, 0.0];
 const VCO_PARAM_LABELS: &[&str] = &["频率 (Hz)", "振幅", "波形"];
+const NOISE_PARAM_DEFAULTS: &[f32] = &[0.2];
+const NOISE_PARAM_LABELS: &[&str] = &["振幅"];
 
 /// Every built-in kind, including planned (non-addable) entries.
 pub const MODULE_CATALOG: &[ModuleDesc] = &[
     ModuleDesc {
         kind: NodeKind::Vco,
+        family: ModuleFamily::Oscillator,
         ports: PortCounts {
             inputs: 0,
             outputs: 1,
             params: 3,
         },
-        name: "振荡器",
+        name: "压控振荡器",
         code: "VCO",
         canvas_label: "振荡器 · VCO",
         summary: "",
         inspector_blurb: "",
-        section: ModuleSection::Core,
         addable: true,
         param_defaults: VCO_PARAM_DEFAULTS,
         param_labels: VCO_PARAM_LABELS,
     },
     ModuleDesc {
+        kind: NodeKind::Noise,
+        family: ModuleFamily::Oscillator,
+        ports: PortCounts {
+            inputs: 0,
+            outputs: 1,
+            params: 1,
+        },
+        name: "白噪声",
+        code: "Noise",
+        canvas_label: "噪声 · Noise",
+        summary: "白噪声信号源",
+        inspector_blurb: "输出白噪声；可用振幅滑条调节电平。",
+        addable: true,
+        param_defaults: NOISE_PARAM_DEFAULTS,
+        param_labels: NOISE_PARAM_LABELS,
+    },
+    ModuleDesc {
         kind: NodeKind::Output,
+        family: ModuleFamily::Io,
         ports: PortCounts {
             inputs: 1,
             outputs: 0,
@@ -106,13 +149,13 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         canvas_label: "输出 · Output",
         summary: "音频设备输出",
         inspector_blurb: "将输入信号发送到音频设备。",
-        section: ModuleSection::Core,
         addable: true,
         param_defaults: &[],
         param_labels: &[],
     },
     ModuleDesc {
         kind: NodeKind::Delay,
+        family: ModuleFamily::Utility,
         ports: PortCounts {
             inputs: 1,
             outputs: 1,
@@ -123,13 +166,13 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         canvas_label: "块延迟 · Delay",
         summary: "1 block · 块延迟",
         inspector_blurb: "将信号延迟一个音频块。",
-        section: ModuleSection::Utility,
         addable: true,
         param_defaults: &[],
         param_labels: &[],
     },
     ModuleDesc {
         kind: NodeKind::Silence,
+        family: ModuleFamily::Utility,
         ports: PortCounts {
             inputs: 0,
             outputs: 1,
@@ -140,13 +183,13 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         canvas_label: "静音源 · Silence",
         summary: "静音信号源",
         inspector_blurb: "输出恒为零的静音信号。",
-        section: ModuleSection::Utility,
         addable: true,
         param_defaults: &[],
         param_labels: &[],
     },
     ModuleDesc {
         kind: NodeKind::Vcf,
+        family: ModuleFamily::Filter,
         ports: PortCounts {
             inputs: 2,
             outputs: 1,
@@ -157,13 +200,13 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         canvas_label: "滤波器 · VCF",
         summary: "计划中",
         inspector_blurb: "此模块暂无可编辑参数。",
-        section: ModuleSection::Planned,
         addable: false,
         param_defaults: &[0.0, 0.0],
         param_labels: &["参数", "参数"],
     },
     ModuleDesc {
         kind: NodeKind::Vca,
+        family: ModuleFamily::AmpEnv,
         ports: PortCounts {
             inputs: 2,
             outputs: 1,
@@ -174,13 +217,13 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         canvas_label: "放大器 · VCA",
         summary: "计划中",
         inspector_blurb: "此模块暂无可编辑参数。",
-        section: ModuleSection::Planned,
         addable: false,
         param_defaults: &[0.0],
         param_labels: &["参数"],
     },
     ModuleDesc {
         kind: NodeKind::Adsr,
+        family: ModuleFamily::AmpEnv,
         ports: PortCounts {
             inputs: 1,
             outputs: 1,
@@ -191,13 +234,13 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         canvas_label: "包络 · ADSR",
         summary: "计划中",
         inspector_blurb: "此模块暂无可编辑参数。",
-        section: ModuleSection::Planned,
         addable: false,
         param_defaults: &[0.0, 0.0, 0.0, 0.0],
         param_labels: &["参数", "参数", "参数", "参数"],
     },
     ModuleDesc {
         kind: NodeKind::Lfo,
+        family: ModuleFamily::Modulation,
         ports: PortCounts {
             inputs: 0,
             outputs: 1,
@@ -208,13 +251,13 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         canvas_label: "LFO",
         summary: "计划中",
         inspector_blurb: "此模块暂无可编辑参数。",
-        section: ModuleSection::Planned,
         addable: false,
         param_defaults: &[0.0, 0.0],
         param_labels: &["参数", "参数"],
     },
     ModuleDesc {
         kind: NodeKind::Mixer,
+        family: ModuleFamily::Mixer,
         ports: PortCounts {
             inputs: 4,
             outputs: 1,
@@ -225,7 +268,6 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         canvas_label: "混音器 · Mixer",
         summary: "计划中",
         inspector_blurb: "此模块暂无可编辑参数。",
-        section: ModuleSection::Planned,
         addable: false,
         param_defaults: &[0.0],
         param_labels: &["参数"],
@@ -239,37 +281,35 @@ impl NodeKind {
         // Manual index keeps this `const` without scanning MODULE_CATALOG.
         match self {
             Self::Vco => &MODULE_CATALOG[0],
-            Self::Output => &MODULE_CATALOG[1],
-            Self::Delay => &MODULE_CATALOG[2],
-            Self::Silence => &MODULE_CATALOG[3],
-            Self::Vcf => &MODULE_CATALOG[4],
-            Self::Vca => &MODULE_CATALOG[5],
-            Self::Adsr => &MODULE_CATALOG[6],
-            Self::Lfo => &MODULE_CATALOG[7],
-            Self::Mixer => &MODULE_CATALOG[8],
+            Self::Noise => &MODULE_CATALOG[1],
+            Self::Output => &MODULE_CATALOG[2],
+            Self::Delay => &MODULE_CATALOG[3],
+            Self::Silence => &MODULE_CATALOG[4],
+            Self::Vcf => &MODULE_CATALOG[5],
+            Self::Vca => &MODULE_CATALOG[6],
+            Self::Adsr => &MODULE_CATALOG[7],
+            Self::Lfo => &MODULE_CATALOG[8],
+            Self::Mixer => &MODULE_CATALOG[9],
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{MODULE_CATALOG, ModuleDesc};
+    use super::{MODULE_CATALOG, ModuleDesc, ModuleFamily};
     use crate::NodeKind;
 
     #[test]
     fn catalog_covers_every_kind_exactly_once() {
         let mut seen = Vec::new();
         for desc in MODULE_CATALOG {
-            assert!(
-                !seen.contains(&desc.kind),
-                "duplicate kind {:?}",
-                desc.kind
-            );
+            assert!(!seen.contains(&desc.kind), "duplicate kind {:?}", desc.kind);
             seen.push(desc.kind);
             assert_eq!(desc.kind.desc().kind, desc.kind);
         }
         let all = [
             NodeKind::Vco,
+            NodeKind::Noise,
             NodeKind::Vcf,
             NodeKind::Vca,
             NodeKind::Adsr,
@@ -287,6 +327,18 @@ mod tests {
             );
         }
         assert_eq!(seen.len(), all.len());
+    }
+
+    #[test]
+    fn oscillator_family_has_vco_and_noise() {
+        let osc: Vec<_> = MODULE_CATALOG
+            .iter()
+            .filter(|d| d.family == ModuleFamily::Oscillator)
+            .map(|d| d.kind)
+            .collect();
+        assert!(osc.contains(&NodeKind::Vco));
+        assert!(osc.contains(&NodeKind::Noise));
+        assert_eq!(osc.len(), 2);
     }
 
     #[test]
@@ -311,6 +363,7 @@ mod tests {
     fn desc_ports_match_legacy_layout() {
         let cases: &[(NodeKind, u32, u32, u32)] = &[
             (NodeKind::Vco, 0, 1, 3),
+            (NodeKind::Noise, 0, 1, 1),
             (NodeKind::Vcf, 2, 1, 2),
             (NodeKind::Vca, 2, 1, 1),
             (NodeKind::Adsr, 1, 1, 4),
