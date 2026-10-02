@@ -40,7 +40,11 @@ impl Schedule {
         kinds: HashMap<NodeId, NodeKind>,
         links: Vec<Link>,
     ) -> Self {
-        Self { order, kinds, links }
+        Self {
+            order,
+            kinds,
+            links,
+        }
     }
 
     /// Topological execution order (includes compiler-inserted delay nodes).
