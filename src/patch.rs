@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{NodeId, NodeKind, ParamCell, ParamId, Schedule};
+use crate::{NodeId, NodeKind, ParamCell, ParamId, Schedule, ScopeTap};
 
 /// Default parameter value for a `(NodeKind, ParamId)` slot.
 #[must_use]
@@ -17,10 +17,12 @@ pub fn param_label(kind: NodeKind, param: ParamId) -> &'static str {
     kind.desc().param_label(param)
 }
 
-/// Lock-free parameter cells keyed by node + param index.
+/// Lock-free per-node shared state: parameter cells (GUI ↔ DSP) plus monitor
+/// taps (DSP → GUI) for kinds whose descriptor sets `monitors`.
 #[derive(Clone, Default)]
 pub struct ParamRegistry {
     cells: HashMap<(NodeId, ParamId), Arc<ParamCell>>,
+    taps: HashMap<NodeId, Arc<ScopeTap>>,
 }
 
 impl ParamRegistry {
@@ -33,18 +35,7 @@ impl ParamRegistry {
     /// Create cells with defaults for every param slot on each scheduled node.
     #[must_use]
     pub fn with_defaults(schedule: &Schedule) -> Self {
-        let mut registry = Self::new();
-        for (node, kind) in schedule.nodes() {
-            let count = kind.port_counts().params;
-            for raw in 0..count {
-                let param = ParamId::new(raw);
-                let value = default_param_value(kind, param);
-                registry
-                    .cells
-                    .insert((node, param), Arc::new(ParamCell::new(value)));
-            }
-        }
-        registry
+        Self::merge(None, schedule)
     }
 
     /// Reuse existing cells for surviving nodes; create defaults for new ones.
@@ -57,10 +48,14 @@ impl ParamRegistry {
                 let param = ParamId::new(raw);
                 let cell = existing
                     .and_then(|prev| prev.get(node, param))
-                    .unwrap_or_else(|| {
-                        Arc::new(ParamCell::new(default_param_value(kind, param)))
-                    });
+                    .unwrap_or_else(|| Arc::new(ParamCell::new(default_param_value(kind, param))));
                 registry.cells.insert((node, param), cell);
+            }
+            if kind.desc().monitors {
+                let tap = existing
+                    .and_then(|prev| prev.tap(node))
+                    .unwrap_or_else(|| Arc::new(ScopeTap::new()));
+                registry.taps.insert(node, tap);
             }
         }
         registry
@@ -70,6 +65,12 @@ impl ParamRegistry {
     #[must_use]
     pub fn get(&self, node: NodeId, param: ParamId) -> Option<Arc<ParamCell>> {
         self.cells.get(&(node, param)).cloned()
+    }
+
+    /// Look up the monitor tap of a `monitors` node.
+    #[must_use]
+    pub fn tap(&self, node: NodeId) -> Option<Arc<ScopeTap>> {
+        self.taps.get(&node).cloned()
     }
 
     /// Iterate all `(NodeId, ParamId, Arc<ParamCell>)` entries.
@@ -131,11 +132,35 @@ mod tests {
         }
 
         let merged = CompiledPatch::from_schedule(schedule, Some(&first.params));
-        let cell = merged
-            .params
-            .get(vco, ParamId::new(0))
-            .expect("freq cell");
+        let cell = merged.params.get(vco, ParamId::new(0)).expect("freq cell");
         assert!((cell.value() - 880.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn monitor_taps_only_exist_for_monitoring_kinds() {
+        let mut graph = Graph::new();
+        let vco = graph.insert(NodeKind::Vco);
+        let scope = graph.insert(NodeKind::Scope);
+        let patch = CompiledPatch::from_schedule(graph.compile().expect("compile"), None);
+        assert!(patch.params.tap(vco).is_none());
+        assert!(patch.params.tap(scope).is_some());
+    }
+
+    #[test]
+    fn merge_preserves_monitor_taps() {
+        let mut graph = Graph::new();
+        let scope = graph.insert(NodeKind::Scope);
+        let schedule = graph.compile().expect("compile");
+        let first = CompiledPatch::from_schedule(schedule.clone(), None);
+        let tap = first.params.tap(scope).expect("tap");
+        tap.push(0.5);
+
+        let merged = CompiledPatch::from_schedule(schedule, Some(&first.params));
+        let again = merged.params.tap(scope).expect("tap survives");
+        assert!(std::sync::Arc::ptr_eq(&tap, &again));
+        let mut out = [0.0f32; 1];
+        assert_eq!(again.snapshot(&mut out), 1);
+        assert!((out[0] - 0.5).abs() < f32::EPSILON);
     }
 
     #[test]
