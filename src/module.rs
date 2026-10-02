@@ -69,6 +69,8 @@ pub struct ModuleDesc {
     pub inspector_blurb: &'static str,
     /// When false, the library entry is visible but disabled.
     pub addable: bool,
+    /// When true, the host gives this node a monitor tap (audio → GUI).
+    pub monitors: bool,
     /// Default values; length must equal `ports.params`.
     pub param_defaults: &'static [f32],
     /// UI labels; length must equal `ports.params`.
@@ -116,6 +118,7 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         summary: "",
         inspector_blurb: "",
         addable: true,
+        monitors: false,
         param_defaults: VCO_PARAM_DEFAULTS,
         param_labels: VCO_PARAM_LABELS,
     },
@@ -133,6 +136,7 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         summary: "白噪声信号源",
         inspector_blurb: "输出白噪声；可用振幅滑条调节电平。",
         addable: true,
+        monitors: false,
         param_defaults: NOISE_PARAM_DEFAULTS,
         param_labels: NOISE_PARAM_LABELS,
     },
@@ -150,6 +154,7 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         summary: "音频设备输出",
         inspector_blurb: "将输入信号发送到音频设备。",
         addable: true,
+        monitors: false,
         param_defaults: &[],
         param_labels: &[],
     },
@@ -167,6 +172,7 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         summary: "1 block · 块延迟",
         inspector_blurb: "将信号延迟一个音频块。",
         addable: true,
+        monitors: false,
         param_defaults: &[],
         param_labels: &[],
     },
@@ -184,6 +190,7 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         summary: "静音信号源",
         inspector_blurb: "输出恒为零的静音信号。",
         addable: true,
+        monitors: false,
         param_defaults: &[],
         param_labels: &[],
     },
@@ -195,14 +202,15 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
             outputs: 1,
             params: 2,
         },
-        name: "滤波器",
+        name: "高切滤波器",
         code: "VCF",
-        canvas_label: "滤波器 · VCF",
-        summary: "计划中",
-        inspector_blurb: "此模块暂无可编辑参数。",
-        addable: false,
-        param_defaults: &[0.0, 0.0],
-        param_labels: &["参数", "参数"],
+        canvas_label: "滤波器 · 高切",
+        summary: "二阶低通 · 截止+共振",
+        inspector_blurb: "截止频率 20 Hz–20 kHz（对数）；共振 0–1 对应阻尼 k = 2−2r（0 = 临界阻尼，1 = 高 Q）；CV 输入按 ±4 个八度调制截止。",
+        addable: true,
+        monitors: false,
+        param_defaults: &[2_500.0, 0.2],
+        param_labels: &["截止频率", "共振"],
     },
     ModuleDesc {
         kind: NodeKind::Vca,
@@ -218,6 +226,7 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         summary: "计划中",
         inspector_blurb: "此模块暂无可编辑参数。",
         addable: false,
+        monitors: false,
         param_defaults: &[0.0],
         param_labels: &["参数"],
     },
@@ -235,6 +244,7 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         summary: "计划中",
         inspector_blurb: "此模块暂无可编辑参数。",
         addable: false,
+        monitors: false,
         param_defaults: &[0.0, 0.0, 0.0, 0.0],
         param_labels: &["参数", "参数", "参数", "参数"],
     },
@@ -252,6 +262,7 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         summary: "计划中",
         inspector_blurb: "此模块暂无可编辑参数。",
         addable: false,
+        monitors: false,
         param_defaults: &[0.0, 0.0],
         param_labels: &["参数", "参数"],
     },
@@ -269,8 +280,27 @@ pub const MODULE_CATALOG: &[ModuleDesc] = &[
         summary: "计划中",
         inspector_blurb: "此模块暂无可编辑参数。",
         addable: false,
+        monitors: false,
         param_defaults: &[0.0],
         param_labels: &["参数"],
+    },
+    ModuleDesc {
+        kind: NodeKind::Scope,
+        family: ModuleFamily::Utility,
+        ports: PortCounts {
+            inputs: 1,
+            outputs: 0,
+            params: 0,
+        },
+        name: "示波器",
+        code: "Scope",
+        canvas_label: "示波器 · Scope",
+        summary: "显示输入波形",
+        inspector_blurb: "只读显示：输入端口最近 320 个样本（≈6.7 ms @48 kHz），不产生音频输出。",
+        addable: true,
+        monitors: true,
+        param_defaults: &[],
+        param_labels: &[],
     },
 ];
 
@@ -290,6 +320,7 @@ impl NodeKind {
             Self::Adsr => &MODULE_CATALOG[7],
             Self::Lfo => &MODULE_CATALOG[8],
             Self::Mixer => &MODULE_CATALOG[9],
+            Self::Scope => &MODULE_CATALOG[10],
         }
     }
 }
@@ -318,6 +349,7 @@ mod tests {
             NodeKind::Output,
             NodeKind::Silence,
             NodeKind::Delay,
+            NodeKind::Scope,
         ];
         for kind in all {
             assert!(
@@ -339,6 +371,16 @@ mod tests {
         assert!(osc.contains(&NodeKind::Vco));
         assert!(osc.contains(&NodeKind::Noise));
         assert_eq!(osc.len(), 2);
+    }
+
+    #[test]
+    fn only_scope_declares_a_monitor_tap() {
+        let monitoring: Vec<_> = MODULE_CATALOG
+            .iter()
+            .filter(|desc| desc.monitors)
+            .map(|desc| desc.kind)
+            .collect();
+        assert_eq!(monitoring, [NodeKind::Scope]);
     }
 
     #[test]
@@ -372,6 +414,7 @@ mod tests {
             (NodeKind::Output, 1, 0, 0),
             (NodeKind::Silence, 0, 1, 0),
             (NodeKind::Delay, 1, 1, 0),
+            (NodeKind::Scope, 1, 0, 0),
         ];
         for &(kind, inputs, outputs, params) in cases {
             let ModuleDesc { ports, .. } = *kind.desc();
