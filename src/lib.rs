@@ -3,6 +3,7 @@
 //! This crate is shared by the GUI and the audio engine. It must not depend on
 //! concrete DSP nodes or on windowing/audio-host crates.
 
+mod audio;
 mod command;
 mod compile;
 mod error;
@@ -14,7 +15,9 @@ mod patch;
 mod ports;
 mod schedule;
 mod status;
+mod tap;
 
+pub use audio::{AudioBackend, AudioCatalog, AudioDevice, AudioSelection, AudioSettingsRequest};
 pub use command::RtCommand;
 pub use error::{GraphError, PortDirection};
 pub use graph::{Edge, Graph, Node, NodeKind, PortCounts, PortRef};
@@ -24,3 +27,4 @@ pub use param::ParamCell;
 pub use patch::{CompiledPatch, ParamRegistry, default_param_value, param_label};
 pub use schedule::{Link, Schedule};
 pub use status::EngineStatus;
+pub use tap::{SCOPE_CAPACITY, ScopeTap};
