@@ -89,9 +89,9 @@ fn validate(graph: &Graph) -> Result<(), GraphError> {
         let from_kind = kinds.get(&edge.from.node).ok_or(GraphError::UnknownNode {
             node: edge.from.node,
         })?;
-        let to_kind = kinds.get(&edge.to.node).ok_or(GraphError::UnknownNode {
-            node: edge.to.node,
-        })?;
+        let to_kind = kinds
+            .get(&edge.to.node)
+            .ok_or(GraphError::UnknownNode { node: edge.to.node })?;
 
         if edge.from.node == edge.to.node {
             return Err(GraphError::SelfLoop {
@@ -265,7 +265,12 @@ mod tests {
         graph.connect(port(vca, 0), port(vcf, 1));
 
         let schedule = compile_graph(&graph).expect("cycle broken by delay");
-        assert!(schedule.order().iter().any(|id| schedule.kind_of(*id) == Some(NodeKind::Delay)));
+        assert!(
+            schedule
+                .order()
+                .iter()
+                .any(|id| schedule.kind_of(*id) == Some(NodeKind::Delay))
+        );
         assert!(schedule.order().len() >= 4);
     }
 
