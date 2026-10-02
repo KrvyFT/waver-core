@@ -19,6 +19,8 @@ pub enum NodeKind {
     Silence,
     /// One-block delay line; inserted by the compiler to break feedback loops.
     Delay,
+    /// Display-only sink: mirrors its input into a GUI monitor tap, no audio output.
+    Scope,
 }
 
 /// A module instance in the patch.
